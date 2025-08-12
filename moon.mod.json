@@ -1,0 +1,15 @@
+{
+  "name": "metalymph/valkey-moonbit",
+  "version": "0.1.0",
+  "deps": {
+    "moonbitlang/async": "0.2.3",
+    "moonbitlang/x": "0.4.32",
+    "oboard/mio": "0.3.5"
+  },
+  "readme": "README.md",
+  "repository": "",
+  "license": "MIT",
+  "keywords": [],
+  "description": "",
+  "source": "src"
+}
