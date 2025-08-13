@@ -1,5 +1,6 @@
 {
+  "is-main": true,
   "import": [
-    "metalymph/valkey-moonbit/lib"
+    "metalymph/valkey-moonbit/valkey"
   ]
 }

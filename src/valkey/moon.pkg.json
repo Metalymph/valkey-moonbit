@@ -1,6 +1,6 @@
 {
   "import": [
-    "moonbitlang/async",
+    // "moonbitlang/async",
     "moonbitlang/x/fs",
     "oboard/mio"
   ]

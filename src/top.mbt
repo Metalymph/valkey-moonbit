@@ -1,8 +1,12 @@
 ///|
-fn run() -> Unit {
-  let client = try? @lib.ValkeyClient::new()
-  match client {
+fn run_example() -> Unit {
+  match (try? @valkey.make_client()) {
     Ok(client) => println("Client run! \{client.host}")
-    Err(_) => println("Failed to create client")
+    Err(e) => println("Failed to create client \{e}")
   }
+}
+
+///|
+fn main {
+  run_example()
 }

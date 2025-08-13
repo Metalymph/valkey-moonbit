@@ -57,7 +57,7 @@ async fn VKConnectionPool::connect_pool(
       }
       None => {
         self.logger.write_string("Failed to get connection at index \{i}")
-        raise ValkeyError::GitHubCmdListFetching("Failed to get connection")
+        raise ValkeyError::GitHubCmdAPI("Failed to get connection")
       }
     }
     i = i + 1

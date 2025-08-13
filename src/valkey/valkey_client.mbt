@@ -1,12 +1,58 @@
 ///|
+/// Error type for Valkey client operations.
+///
+/// Constructors:
+///
+/// * `CommandParse(@string.View)` : Error parsing a Valkey command with the
+///   problematic command string.
+/// * `GitHubCmdListFetching(@string.View)` : Error fetching command list from
+///   GitHub repository with the error message.
+/// * `InvalidHost(@string.View)` : Error for invalid host configuration with
+///   the invalid host string.
+/// * `IOError(@fs.IOError)` : File system I/O error wrapped from the underlying
+///   file system operation.
+///
+/// Example:
+///
+/// ```moonbit
+/// try {
+///   let client = @valkey.make_client(
+///     host="possibly-invalid-url"
+///   )
+/// } catch {
+///   @valkey.ValkeyError::InvalidHost(host) => 
+///     println("Invalid host: \{host}")
+///   @valkey.ValkeyError::IOError(io_err) => 
+///     println("IO error: \{io_err}")
+///   @valkey.ValkeyError::CommandParse(cmd) => 
+///     println("Command parse error: \{cmd}")
+///   @valkey.ValkeyError::GitHubCmdListFetching(msg) => 
+///     println("GitHub fetch error: \{msg}")
+/// }  noraise {
+///   client => println("Successfully created Valkey client: \{client}")
+/// }
+/// ```
+///
 suberror ValkeyError {
-  CommandParse(@string.View)
-  GitHubCmdListFetching(@string.View)
+  GitHubCmdAPI(@string.View)
   InvalidHost(@string.View)
-  IOError(@fs.IOError)
-}
+  InvalidPort(@string.View)
+  IOError(String)
+} derive(Show)
 
 ///|
+/// Client for connecting to and interacting with Valkey servers.
+///
+/// Since this struct is not marked with any visibility modifier, it is abstract
+/// and users can only pass its value around but cannot directly construct or
+/// destruct it.
+///
+/// Example:
+///
+/// ```moonbit
+/// let _ = make_client()
+/// ```
+///
 pub struct ValkeyClient {
   host : String
   port : UInt16
@@ -47,31 +93,28 @@ pub struct ValkeyClient {
 /// Example:
 ///
 /// ```moonbit
-/// let logger = Logger::new()
-/// let client = ValkeyClient::new(logger~)
-/// let secure_client = ValkeyClient::new(
-///   host="https://my-valkey-server.com", 
-///   port=6380, 
-///   logger~, 
+/// let _ = make_client(
+///   host="https://my-valkey-server-host", 
 ///   tls=true
 /// )
 /// ```
 ///
-pub fn ValkeyClient::new(
+pub fn make_client(
   host~ : @string.View = "localhost",
   port~ : UInt16 = 6379,
-  logger~ : &Logger,
+  logger~ : &Logger = ValkeyLogger::new(),
   tls~ : Bool = false,
   github_cmds_repo~ : String = "https://api.github.com/repos/valkey-io/valkey/contents/src/commands?ref=unstable",
 ) -> ValkeyClient raise ValkeyError {
   let protocol : String = if tls { "https" } else { "http" }
+  let host_port = validatePort(port~)
   let host_url : String = match host {
     "localhost" | "127.0.0.1" => "\{protocol}://127.0.0.1"
-    url_string => validateURL(url_string).to_string()
+    _ => validateHost(host~).to_string()
   }
   {
     host: host_url,
-    port,
+    port: host_port,
     logger,
     tls,
     github_cmds_repo,
@@ -81,12 +124,20 @@ pub fn ValkeyClient::new(
 }
 
 ///|
+pub fn ValkeyClient::full_url(self : ValkeyClient) -> String {
+  if self.tls {
+    return "https://\{self.host}:\{self.port}"
+  }
+  return "http://\{self.host}:\{self.port}"
+}
+
+///|
 pub async fn ValkeyClient::run(
   self : ValkeyClient,
-  force_cmd_fetching~ : Bool = false,
+  force_cmd_reload~ : Bool = false,
 ) -> Unit raise ValkeyError {
-  if force_cmd_fetching || !@fs.path_exists("valkey_commands.mbt") {
-    self.build_commands()
+  if force_cmd_reload || !@fs.path_exists("valkey_commands.mbt") {
+    self.load_commands()
   }
   self.connections_pool.connect_pool()
 }
@@ -97,7 +148,7 @@ pub async fn ValkeyClient::with_connection(
   executor : async (VKConnection) -> Unit raise ValkeyError,
 ) -> Self raise ValkeyError {
   self.orphan_conn = Some(
-    VKConnection::new(url=self.host, tls=self.tls, logger=self.logger),
+    VKConnection::new(url=self.full_url(), tls=self.tls, logger=self.logger),
   )
   self.orphan_conn.unwrap().connect()
   defer self.orphan_conn.unwrap().close()
@@ -116,24 +167,15 @@ pub async fn ValkeyClient::with_connection(
 ///
 /// Throws an error of type `ValkeyError` if:
 ///
-/// * The temporary directory creation fails (wraps `IOError`)
+/// * The temporary directory "json_commands" creation fails (wraps `IOError`)
 /// * The HTTP request to fetch commands from GitHub fails
 /// * Command parsing or generation encounters an error
 ///
-/// Example:
-///
-/// ```moonbit
-/// let logger = Logger::new()
-/// let client = ValkeyClient::new(logger~)
-/// client.build_commands()
-/// ```
-///
-fn ValkeyClient::build_commands(self : ValkeyClient) -> Unit raise ValkeyError {
+fn ValkeyClient::load_commands(self : ValkeyClient) -> Unit raise ValkeyError {
   if !@fs.path_exists("json_commands") {
-    self.logger.write_string("Creating directory 'tmp'...")
-    match (try? @fs.create_dir("json_commands")) {
-      Ok(_) => self.logger.write_string("Creating directory 'tmp'...")
-      Err(e) => {
+    self.logger.write_string("Creating tmp directory 'json_commands'...")
+    @fs.create_dir("json_commands") catch {
+      @fs.IOError(e) => {
         self.logger.write_string("Failed to create directory 'tmp': \{e}")
         raise IOError(e)
       }
@@ -143,6 +185,8 @@ fn ValkeyClient::build_commands(self : ValkeyClient) -> Unit raise ValkeyError {
     self.logger.write_string(
       "Fetching commands from GitHub Valkey official repository...",
     )
+
+    // Fetching GitHub Repo Commands from APIs
     match (try? @mio.get(self.github_cmds_repo)) {
       Ok(response) => {
         if response.statusCode != 200 {
@@ -150,9 +194,38 @@ fn ValkeyClient::build_commands(self : ValkeyClient) -> Unit raise ValkeyError {
             "Failed to fetch commands: status code \{response.statusCode}",
           )
         }
-        parse_commands(response.unwrap_json())
+
+        // Fetches commands from GitHub and parses them (with internal download)
+        try
+          parse_commands_from_github(response.unwrap_json(), self.logger)
+        catch {
+          e => {
+            self.logger.write_string(
+              "Failed parsing commands from GitHub: \{e}",
+            )
+            return
+          }
+        } noraise {
+          _ => self.logger.write_string("Successfully fetched commands")
+        }
+
+        // Delete previous commands soruce file"
         self.logger.write_string("Building commands...")
-        generate_commands()
+        if !@fs.path_exists("valkey_commands.mbt") {
+          self.logger.write_string(
+            "Cleaning previous \"valkey_commands.mbt\" source file...",
+          )
+        }
+
+        // TODO: build commands
+
+        // Writes all the commands into the source file
+        @fs.write_string_to_file("valkey_commands.mbt", "") catch {
+          @fs.IOError(e) => {
+            self.logger.write_string("Failed to create directory 'tmp': \{e}")
+            return
+          }
+        }
       }
       // response.unwrap_json()
       Err(e) =>
@@ -161,17 +234,14 @@ fn ValkeyClient::build_commands(self : ValkeyClient) -> Unit raise ValkeyError {
         )
     }
   })
-}
 
-fn ValkeyClient::parse_commands(github_payload: Json) -> Iter[Command] raise ValkeyError {
-  let commands = Array[Command]::new()
-
-  commands
-}
-
-fn Iter::generate_commands(self: Iter[Command]) -> Unit raise ValkeyError {
-  // This function should generate commands based on the fetched data
-  // For now, it is a placeholder
-  println("Generating commands...")
-  // Implement command generation logic here
+  // Clean up the temporary directory
+  @fs.remove_dir("json_commands") catch {
+    @fs.IOError(e) => {
+      self.logger.write_string(
+        "Failed to remove 'json_commands' directory: \{e}",
+      )
+      raise IOError(e)
+    }
+  }
 }
