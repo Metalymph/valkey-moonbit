@@ -2,5 +2,8 @@
   "is-main": true,
   "import": [
     "metalymph/valkey-moonbit/valkey"
+  ],
+  "test-import": [
+    "metalymph/valkey-moonbit/valkey"
   ]
 }

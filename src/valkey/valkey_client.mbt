@@ -9,31 +9,10 @@
 ///   GitHub repository with the error message.
 /// * `InvalidHost(@string.View)` : Error for invalid host configuration with
 ///   the invalid host string.
-/// * `IOError(@fs.IOError)` : File system I/O error wrapped from the underlying
+/// * `IOError(String)` : File system I/O error wrapped from the underlying
 ///   file system operation.
 ///
-/// Example:
-///
-/// ```moonbit
-/// try {
-///   let client = @valkey.make_client(
-///     host="possibly-invalid-url"
-///   )
-/// } catch {
-///   @valkey.ValkeyError::InvalidHost(host) => 
-///     println("Invalid host: \{host}")
-///   @valkey.ValkeyError::IOError(io_err) => 
-///     println("IO error: \{io_err}")
-///   @valkey.ValkeyError::CommandParse(cmd) => 
-///     println("Command parse error: \{cmd}")
-///   @valkey.ValkeyError::GitHubCmdListFetching(msg) => 
-///     println("GitHub fetch error: \{msg}")
-/// }  noraise {
-///   client => println("Successfully created Valkey client: \{client}")
-/// }
-/// ```
-///
-suberror ValkeyError {
+pub suberror ValkeyError {
   GitHubCmdAPI(@string.View)
   InvalidHost(@string.View)
   InvalidPort(@string.View)
@@ -132,7 +111,7 @@ pub fn ValkeyClient::full_url(self : ValkeyClient) -> String {
 }
 
 ///|
-pub async fn ValkeyClient::run(
+pub async fn ValkeyClient::start(
   self : ValkeyClient,
   force_cmd_reload~ : Bool = false,
 ) -> Unit raise ValkeyError {
@@ -143,17 +122,52 @@ pub async fn ValkeyClient::run(
 }
 
 ///|
+/// Executes a function with a dedicated Valkey connection that is automatically
+/// managed and cleaned up.
+///
+/// Parameters:
+///
+/// * `self` : The ValkeyClient instance to use for creating the connection.
+/// * `executor` : An async function that receives a VKConnection and performs
+///   operations with it. The function may throw ValkeyError exceptions.
+///
+/// Returns the same ValkeyClient instance for method chaining.
+///
+/// Throws an error of type `Error` if the connection creation,
+/// establishment, or the executor function fails.
+///
+/// Example:
+///
+/// ```moonbit
+/// @valkey.run(async fn() -> Unit noraise {
+///   try {
+///     @valkey.make_client().with_connection(async fn(_) raise Error {
+///     // Perform operations with the connection
+///      ...
+///     })
+///   } catch {
+///     ...
+///   } noraise {
+///     _ => println("Successfully executed with connection")
+///   }
+/// })
+/// ```
+///
 pub async fn ValkeyClient::with_connection(
   self : ValkeyClient,
-  executor : async (VKConnection) -> Unit raise ValkeyError,
-) -> Self raise ValkeyError {
+  executor : async (VKConnection) -> Unit raise Error,
+) -> Unit raise Error {
   self.orphan_conn = Some(
     VKConnection::new(url=self.full_url(), tls=self.tls, logger=self.logger),
   )
   self.orphan_conn.unwrap().connect()
-  defer self.orphan_conn.unwrap().close()
+
+  // Connection cleanup
+  defer {
+    self.orphan_conn.unwrap().close()
+    self.orphan_conn = None
+  }
   executor(self.orphan_conn.unwrap())
-  self
 }
 
 ///|

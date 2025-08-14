@@ -48,11 +48,11 @@ async fn VKConnection::connect(self : VKConnection) -> Unit raise ValkeyError {
         self.logger.write_string(
           "Connection failed with status code \{response.statusCode}",
         )
-        raise ValkeyError::GitHubCmdAPI("Connection failed")
+        raise GitHubCmdAPI("Connection failed")
       }
     Err(e) => {
       self.logger.write_string("Connection failed: \{e}")
-      raise ValkeyError::GitHubCmdAPI(e.to_string())
+      raise GitHubCmdAPI(e.to_string())
     }
   }
 }
