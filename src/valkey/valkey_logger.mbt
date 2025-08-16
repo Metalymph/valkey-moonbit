@@ -1,5 +1,5 @@
 ///|
-enum VLLevel {
+pub enum VLLevel {
   Debug
   Info
   Warning

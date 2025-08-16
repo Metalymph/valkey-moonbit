@@ -1,6 +1,7 @@
 {
   "import": [
     "moonbitlang/x/fs",
-    "oboard/mio"
+    "oboard/mio",
+    "moonbitlang/x/stack"
   ]
 }

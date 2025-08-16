@@ -13,6 +13,7 @@
 ///   file system operation.
 ///
 pub suberror ValkeyError {
+  BrokenConnection(@string.View)
   GitHubCmdAPI(@string.View)
   InvalidHost(@string.View)
   InvalidPort(@string.View)
@@ -81,7 +82,7 @@ pub struct ValkeyClient {
 pub fn make_client(
   host~ : @string.View = "localhost",
   port~ : UInt16 = 6379,
-  logger~ : &Logger = ValkeyLogger::new(),
+  logger~ : &Logger = ValkeyLogger::new(), // StringBuilder::new() ?
   tls~ : Bool = false,
   github_cmds_repo~ : String = "https://api.github.com/repos/valkey-io/valkey/contents/src/commands?ref=unstable",
 ) -> ValkeyClient raise ValkeyError {
@@ -203,10 +204,11 @@ fn ValkeyClient::load_commands(self : ValkeyClient) -> Unit raise ValkeyError {
     // Fetching GitHub Repo Commands from APIs
     match (try? @mio.get(self.github_cmds_repo)) {
       Ok(response) => {
-        if response.statusCode != 200 {
+        guard response.statusCode == 200 else {
           self.logger.write_string(
             "Failed to fetch commands: status code \{response.statusCode}",
           )
+          return
         }
 
         // Fetches commands from GitHub and parses them (with internal download)
@@ -258,4 +260,93 @@ fn ValkeyClient::load_commands(self : ValkeyClient) -> Unit raise ValkeyError {
       raise IOError(e)
     }
   }
+}
+
+///|
+async fn ValkeyClient::exec_command(
+  self : ValkeyClient,
+  command : Command,
+) -> CmdResponse noraise {
+  match command {
+    // Handle specific commands here
+    _ =>
+      // Default command execution logic
+      self.logger.write_string("Executing command: \{command}")
+    // Simulate command execution and return a response
+  }
+  CmdResponse::new()
+}
+
+///|
+pub fn ValkeyClient::command(
+  self : ValkeyClient,
+  command : Command,
+) -> CmdResponse raise ValkeyError {
+  guard self.orphan_conn is Some(orphan_conn) && orphan_conn.is_connected else {
+    raise BrokenConnection("No active connection to execute command")
+  }
+  let mut cmd_resp : CmdResponse = CmdResponse::new()
+  run(fn() { cmd_resp = self.exec_command(command) })
+  cmd_resp
+}
+
+///|
+/// Executes multiple Valkey commands in sequence as a pipeline and returns
+/// their responses in order.
+///
+/// Parameters:
+///
+/// * `self` : The ValkeyClient instance to use for executing the pipeline.
+/// * `commands` : An array of Command objects to be executed in sequence.
+///
+/// Returns a stack containing CmdResponse objects for each executed command,
+/// with responses pushed in the order of command execution.
+///
+/// Throws an error of type `ValkeyError::BrokenConnection` if there is no
+/// active connection or the connection is not established. Throws an error of
+/// type `ValkeyError::GitHubCmdAPI` if any command in the pipeline returns an
+/// invalid response (status code other than 200).
+///
+/// Example:
+///
+/// ```moonbit
+/// let client = @valkey.make_client()
+/// run(fn() -> Unit {
+///   client.with_connection(async fn(_) raise Error {
+///     // let commands = [command1, command2, command3]
+///     let _ = client.pipeline([])
+///     // Process responses from the stack
+///   }) catch {
+///     e => println("Error executing pipeline: \{e}")
+///   }
+/// })
+/// ```
+///
+pub async fn ValkeyClient::pipeline(
+  self : ValkeyClient,
+  commands : Array[Command],
+) -> @stack.Stack[CmdResponse] raise ValkeyError {
+  guard self.orphan_conn is Some(orphan_conn) && orphan_conn.is_connected else {
+    raise BrokenConnection("No active connection to execute command")
+  }
+  // Execute pipeline logic here
+  // if self.logger is ValkeyLogger {
+  //   logger.set_level(VLLevel::Debug)
+  //   self.logger.write_string("Executing pipeline...")
+  // }
+
+  // Cumulate responses for each command in the pipeline onto a stack
+  let stack_trace : @stack.Stack[CmdResponse] = @stack.Stack::new()
+  for index, command in commands {
+    let cmd_resp = self.exec_command(command)
+    guard cmd_resp.status == 200 else {
+      self.logger.write_string(
+        "Failed to execute command \{index}: Invalid response",
+      )
+      raise ValkeyError::GitHubCmdAPI("Invalid command response")
+    }
+    stack_trace.push(cmd_resp)
+  }
+  self.logger.write_string("Pipeline executed successfully")
+  stack_trace
 }
