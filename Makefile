@@ -14,7 +14,7 @@ run:
 	moon run --target $(t) src 
 
 test_all:
-	moon test -p metalymph/valkey-moonbit/valkey -f valkey_client_test.mbt --target $(t)
+	moon test -p metalymph/valkey-moonbit/valkey -f client_test.mbt --target $(t)
 
 test:
-	moon test -p metalymph/valkey-moonbit/valkey -f valkey_client_test.mbt -i $(i) --target $(t)
+	moon test -p metalymph/valkey-moonbit/valkey -f client_test.mbt -i $(i) --target $(t)
