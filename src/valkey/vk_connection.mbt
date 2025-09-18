@@ -28,6 +28,7 @@ pub fn VKConnection::new(
   tls~ : Bool,
   logger~ : &Logger,
 ) -> VKConnection {
+  logger.write_string("Creating connection to \{url} with TLS: \{tls}")
   { url, tls, is_connected: false, logger }
 }
 
@@ -38,7 +39,7 @@ pub fn VKConnection::new(
 ///
 async fn VKConnection::connect(self : VKConnection) -> Unit raise ValkeyError {
   self.logger.write_string("Connecting to \{self.url}...")
-  match (try? @mio.get(self.url)) {
+  match (try? @mio.get(self.url + "/PING/hello")) {
     Ok(response) =>
       if response.statusCode == 200 {
         let new_conn = self

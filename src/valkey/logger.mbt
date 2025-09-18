@@ -7,6 +7,10 @@ pub enum VLLevel {
 } derive(Show)
 
 ///|
+/// A logger implementation for Valkey that adheres to the Logger interface.
+/// TODO: Expand logging capabilities (e.g., log to file, different levels)
+/// and possibly integrate with existing logging frameworks.
+///
 pub struct ValkeyLogger {
   mut level : VLLevel
 } derive(Show)

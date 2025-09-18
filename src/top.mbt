@@ -1,8 +1,8 @@
 ///|
 fn run_example() -> Unit {
   match (try? @valkey.make_client()) {
-    Ok(client) => println("Client run! \{client.host}")
-    Err(e) => println("Failed to create client \{e}")
+    Ok(client) => println("ℹ️ Client started 🐇: \{client.host}")
+    Err(e) => println("‼️ Failed to create client \{e}")
   }
 }
 

@@ -25,13 +25,14 @@ struct VKConnectionPool {
 fn make_connection_pool(
   size~ : UInt16 = 8,
   url~ : String,
+  port~ : UInt16 = 6379,
   tls~ : Bool,
   logger~ : &Logger,
 ) -> VKConnectionPool {
   let connections = Array::new()
   let mut i : UInt16 = 0
   while i < size {
-    let conn = VKConnection::new(url~, tls~, logger~)
+    let conn = VKConnection::new(url="\{url}:\{port}", tls~, logger~)
     connections.push(conn)
     i = i + 1
   }

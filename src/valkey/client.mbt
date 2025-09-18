@@ -80,12 +80,12 @@ pub struct ValkeyClient {
 /// ```
 ///
 pub fn make_client(
-  host~ : @string.View = "localhost",
-  port~ : UInt16 = 6379,
-  logger~ : &Logger = ValkeyLogger::new(), // StringBuilder::new() ?
-  tls~ : Bool = false,
-  github_cmds_repo~ : String = "https://api.github.com/repos/valkey-io/valkey/contents/src/commands?ref=unstable",
-  force_cmd_reload~ : Bool = false,
+  host? : @string.View = "localhost",
+  port? : UInt16 = 6379,
+  logger? : &Logger = StringBuilder::new(), // TODO: ValkeyLogger::new(),
+  tls? : Bool = false,
+  github_cmds_repo? : String = "https://api.github.com/repos/valkey-io/valkey/contents/src/commands?ref=unstable",
+  force_cmd_reload? : Bool = false,
 ) -> ValkeyClient raise ValkeyError {
   let protocol : String = if tls { "https" } else { "http" }
   let host_port = validatePort(port~)
@@ -109,11 +109,11 @@ pub fn make_client(
   let mut start_result : Result[Unit, ValkeyError] = Ok(())
   run(fn() noraise {
     let res = try? vk_client.start(force_cmd_reload~)
-    if res.is_err() {
+    if res is Err(_) {
       start_result = Err(res.unwrap_err())
     }
   })
-  if start_result.is_err() {
+  if start_result is Err(_) {
     raise start_result.unwrap_err()
   }
   vk_client
@@ -185,7 +185,7 @@ pub fn ValkeyClient::full_url(self : ValkeyClient) -> String {
 ///
 pub async fn ValkeyClient::start(
   self : ValkeyClient,
-  force_cmd_reload~ : Bool = false,
+  force_cmd_reload? : Bool = false,
 ) -> Unit raise ValkeyError {
   // commands.mbt is the file that contains the concrete commands definitions
   if force_cmd_reload || !@fs.path_exists("commands.mbt") {
@@ -286,7 +286,7 @@ fn ValkeyClient::load_commands(self : ValkeyClient) -> Unit raise ValkeyError {
 
         // Fetches commands from GitHub and parses them (with internal download)
         try
-          parse_commands_from_github(response.unwrap_json(), self.logger)
+          fetch_commands_from_github(response.unwrap_json(), self.logger)
         catch {
           e => {
             self.logger.write_string(
@@ -298,18 +298,18 @@ fn ValkeyClient::load_commands(self : ValkeyClient) -> Unit raise ValkeyError {
           _ => self.logger.write_string("Successfully fetched commands")
         }
 
-        // Delete previous commands soruce file"
+        // Delete previous commands source file
         self.logger.write_string("Building commands...")
-        if !@fs.path_exists("valkey_commands.mbt") {
+        if !@fs.path_exists("commands.mbt") {
           self.logger.write_string(
-            "Cleaning previous \"valkey_commands.mbt\" source file...",
+            "Cleaning previous \"commands.mbt\" source file...",
           )
         }
 
-        // TODO: build commands
+        // TODO: build commands reading from "json_commands" directory and parsing them
 
         // Writes all the commands into the source file
-        @fs.write_string_to_file("valkey_commands.mbt", "") catch {
+        @fs.write_string_to_file("commands.mbt", "") catch {
           @fs.IOError(e) => {
             self.logger.write_string("Failed to create directory 'tmp': \{e}")
             return

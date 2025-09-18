@@ -63,12 +63,13 @@ fn validateHost(host~ : @string.View) -> @string.View raise ValkeyError {
 ///
 /// Throws an error of type `ValkeyError` if the download operation fails or if
 /// there are issues processing the command file.
+/// 
+/// TODO: enhance with_task_group
 ///
-async fn parse_commands_from_github(
+async fn fetch_commands_from_github(
   json : Json,
   logger : &Logger,
 ) -> Unit raise ValkeyError {
-  // TODO: with_task_group
   let json_array = match json {
     Json::Array(arr) => arr
     _ => {
@@ -78,6 +79,7 @@ async fn parse_commands_from_github(
   }
 
   // Iterates through each JSON object in the array to find the command files
+  // and download commands from GitHub using their download URLs.
   for json_obj in json_array {
     match json_obj {
       {
@@ -109,7 +111,7 @@ async fn parse_commands_from_github(
 ///|
 async fn download_command_json_file_from_github(
   json_filename : @string.View,
-  url~ : String = "https://raw.githubusercontent.com/valkey-io/valkey/unstable/src/commands/\{json_filename}",
+  url? : String = "https://raw.githubusercontent.com/valkey-io/valkey/unstable/src/commands/\{json_filename}",
   logger : &Logger,
 ) -> Unit raise ValkeyError {
   logger.write_string("Downloading command json file from \{url}...")

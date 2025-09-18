@@ -10,6 +10,9 @@ help:
 	@echo "  Test index (i): 0, 1, .."
 	@echo "  Targets (t): js,native,wasm-gc"
 
+dev:
+	watchexec -r -e mbt,mod.json,pkg.json moon run --target $(t) src
+
 run:
 	moon run --target $(t) src 
 
